@@ -1,26 +1,26 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DHT11.h>
-#include <Servo.h> // Add Servo library
+#include <Servo.h>
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-DHT11 dht11(2); // Pin D2 for DHT11
+DHT11 dht11(2); // DHT11 on D2
 
-// Declare two servos
-Servo servo1; // For one leg
-Servo servo2; // For the other leg
+// Declare servos
+Servo servo1; // First servo (e.g., left leg)
+Servo servo2; // Second servo (e.g., right leg)
 
 void setup() {
   lcd.init();
   lcd.backlight();
-  Serial.begin(9600); // Already used for DHT11 debugging, also for Python later
+  Serial.begin(9600);
 
-  // Attach servos to pins
-  servo1.attach(9); // Pin D9 for Servo 1
-  servo2.attach(10); // Pin D10 for Servo 2
+  // Attach servos
+  servo1.attach(A1); // Servo 1 on A1
+  servo2.attach(10); // Servo 2 on D10
 
-  // Initial servo positions
-  servo1.write(90); // Center position (0-180 degrees)
+  // Set initial servo positions
+  servo1.write(90); // Center position
   servo2.write(90);
 
   lcd.setCursor(0, 0);
@@ -33,23 +33,26 @@ void loop() {
   int result = dht11.readTemperatureHumidity(temperature, humidity);
 
   if (result == 0) {
+    // Serial output for debugging
     Serial.print("Temperature: ");
     Serial.print(temperature);
     Serial.print(" °C\tHumidity: ");
     Serial.print(humidity);
     Serial.println(" %");
 
-    // Display humidity on LCD
-    lcd.setCursor(0, 1);
-    lcd.print("Hum: ");
+    // Display on LCD
+    lcd.setCursor(0, 1); // Second line
+    lcd.print("T:"); // Temperature label
+    lcd.print(temperature);
+    lcd.print("C H:"); // Humidity label
     lcd.print(humidity);
-    lcd.print("%    "); // Clear extra characters
+    lcd.print("%  "); // Clear extra characters
 
-    // Move servos based on temperature (example logic)
-    if (temperature > 30) { // If too hot, "react"
-      servo1.write(120); // Move one leg
-      servo2.write(60);  // Move other leg (opposite direction)
-      delay(500); // Hold position briefly
+    // Servo movement based on temperature (placeholder for walking)
+    if (temperature > 30) { // If hot, move servos
+      servo1.write(120); // Simulate step
+      servo2.write(60);
+      delay(500);
       servo1.write(90); // Return to center
       servo2.write(90);
     }
@@ -59,5 +62,5 @@ void loop() {
     lcd.print("Sensor Error ");
   }
 
-  delay(2000); // Slow down loop for readability
+  delay(2000); // Delay for readability
 }
