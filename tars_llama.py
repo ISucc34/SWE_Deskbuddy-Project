@@ -1,39 +1,67 @@
 import ollama
 import serial
 import re
-
-def extract_single_word(response):
-    """
-    Extract a single meaningful word from the response, avoiding trivial words.
-    Args:
-        response (str): The full response from LLaMA.
-    Returns:
-        str: A single word, or 'Error' if none found.
-    """
-    words = re.findall(r'\b\w+\b', response.lower())
-    stopwords = {'a', 'an', 'the', 'is', 'are', 'was', 'were', 'to', 'and', 'or', 'in', 'on', 'at'}
-    for word in words:
-        if word not in stopwords and len(word) > 2:
-            return word
-    return "Error"
+import time
 
 def generate_response(user_input):
     """
-    Generate a response and extract a single word.
+    Prompt LLaMA to generate a condensed response (max 160 chars) and split into chunks of max 16 chars.
     Args:
         user_input (str): User's input prompt.
     Returns:
-        str: A single word from the response.
+        list: List of chunks (each ≤16 chars, breaking at word boundaries).
     """
     try:
+        # Craft a prompt that instructs LLaMA to condense the response
+        prompt = (
+            f"{user_input}\n\n"
+            "Respond in a concise, meaningful way. Your response must be a complete thought, "
+            "no longer than 160 characters (including spaces), and should be easily split into "
+            "chunks of up to 16 characters each, breaking at word boundaries. Avoid filler phrases "
+            "like 'what an interesting question' and ensure clarity. For example, if the prompt is "
+            "'Tell me about the Ming Dynasty', respond with something like 'Ming: 1368-1644, Great Wall built, art flourished, trade grew.'"
+        )
         response = ollama.generate(
             model="llama3",
-            prompt=user_input,
-            options={"temperature": 0.7, "max_tokens": 50}
+            prompt=prompt,
+            options={"temperature": 0.7, "max_tokens": 100}  # Increased to allow longer response
         )
-        return extract_single_word(response["response"])
+        full_response = response["response"].strip()
+
+        # Ensure the response is ≤160 chars (in case LLaMA doesn't fully comply)
+        if len(full_response) > 160:
+            words = full_response.split()
+            trimmed = ""
+            for word in words:
+                if len(trimmed) + len(word) + 1 <= 160:
+                    trimmed += (word + " ") if trimmed else word
+                else:
+                    break
+            full_response = trimmed.strip()
+
+        # Split into chunks of ≤16 chars, breaking at word boundaries
+        chunks = []
+        current_chunk = ""
+        words = full_response.split()
+        for word in words:
+            space_to_add = 1 if current_chunk else 0
+            if len(current_chunk) + len(word) + space_to_add <= 16:
+                if current_chunk:
+                    current_chunk += " " + word
+                else:
+                    current_chunk = word
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = word
+                if len(chunks) == 10:  # Max 10 refreshes
+                    break
+        if current_chunk and len(chunks) < 10:
+            chunks.append(current_chunk)
+
+        return chunks if chunks else ["Error"]
     except Exception as e:
-        return "Error"
+        return ["Error"]
 
 def main():
     arduino = serial.Serial('/dev/cu.usbserial-10', 9600, timeout=1)  # Adjust to your port
@@ -45,9 +73,11 @@ def main():
             print("TARS: Shutting down.")
             arduino.write(b"exit\n")
             break
-        word = generate_response(user_input)
-        print(f"TARS LCD Output: {word}")
-        arduino.write(word.encode() + b"\n")
+        chunks = generate_response(user_input)
+        print("TARS LCD Output (sequential):", " | ".join(chunks))
+        for chunk in chunks:
+            arduino.write(chunk.encode() + b"\n")
+            time.sleep(2)  # Delay to allow LCD to display each chunk
 
 if __name__ == "__main__":
     main()
